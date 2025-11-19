@@ -119,7 +119,7 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
         },
       };
       modelChatInformationList.push(modelInfo);
-      modelConfigTable.set(modelConfig.modelName, modelConfig);
+      modelConfigTable.set(modelConfig.id, modelConfig);
     }
     this._modelConfig = modelConfigTable;
     return modelChatInformationList;
