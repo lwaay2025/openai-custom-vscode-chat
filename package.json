@@ -1,7 +1,7 @@
 {
 	"name": "openai-custom-vscode-chat",
 	"publisher": "lijcoder",
-	"displayName": "openAI Custom Provider for GitHub Copilot Chat",
+	"displayName": "OpenAI Custom Provider for GitHub Copilot Chat",
 	"description": "An extension that integrates OpenAI Custom Inference Providers into GitHub Copilot Chat",
 	"icon": "assets/logo.png",
 	"repository": {
