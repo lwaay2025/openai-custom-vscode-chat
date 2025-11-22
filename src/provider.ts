@@ -94,9 +94,14 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
     options: { silent: boolean },
     _token: CancellationToken
   ): Promise<LanguageModelChatInformation[]> {
-    const configPath = await this.storage.getConfig();
+    const configPath = await this.storage.getConfig() as string | undefined;
     const ignore = options.silent === true ? true : true;
     if (!configPath && ignore) {
+      return [];
+    }
+    try {
+      await vscode.workspace.fs.stat(vscode.Uri.file(configPath as string));
+    } catch {
       return [];
     }
     const configRaw = await vscode.workspace.fs.readFile(vscode.Uri.file(configPath as string));
