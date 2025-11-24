@@ -13,7 +13,8 @@
             "capabilities": {
                 "supports_tools": true,
                 "supports_image": false
-            }
+            },
+            "isDefault": false
         }
     ]
 }
