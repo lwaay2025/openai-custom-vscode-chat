@@ -1,6 +1,9 @@
 import * as vscode from "vscode";
 import type { OpenAIChatMessage, OpenAIChatRole, OpenAIFunctionToolDef, OpenAIToolCall } from "./types";
 
+// Constants
+const CALL_ID_SUFFIX_LENGTH = 8;
+
 // Tool calling sanitization helpers
 
 function isIntegerLikePropertyName(propertyName: string | undefined): boolean {
@@ -152,7 +155,7 @@ export function convertMessages(messages: readonly vscode.LanguageModelChatReque
       if (part instanceof vscode.LanguageModelTextPart) {
         textParts.push(part.value);
       } else if (part instanceof vscode.LanguageModelToolCallPart) {
-        const id = part.callId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const id = part.callId || `${Date.now()}-${Math.random().toString(36).slice(2, 2 + CALL_ID_SUFFIX_LENGTH)}`;
         let args = "{}";
         try {
           args = JSON.stringify(part.input ?? {});

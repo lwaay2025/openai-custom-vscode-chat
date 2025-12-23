@@ -12,6 +12,9 @@ import type {
 } from "./types";
 import { convertMessages, convertTools } from "./utils";
 
+// Constants for ID generation
+const CALL_ID_SUFFIX_LENGTH = 8;
+
 /**
  * Base adapter interface for LLM APIs
  */
@@ -20,7 +23,7 @@ export interface LLMAdapter {
    * Build the request body for the API
    */
   buildRequest(
-    messages: readonly vscode.LanguageModelChatMessage[],
+    messages: readonly vscode.LanguageModelChatRequestMessage[],
     options: vscode.ProvideLanguageModelChatResponseOptions,
     config: OpenAICustomModelConfig
   ): { endpoint: string; body: Record<string, unknown> };
@@ -49,7 +52,7 @@ export type StreamEventResult =
  */
 export class ChatCompletionsAdapter implements LLMAdapter {
   buildRequest(
-    messages: readonly vscode.LanguageModelChatMessage[],
+    messages: readonly vscode.LanguageModelChatRequestMessage[],
     options: vscode.ProvideLanguageModelChatResponseOptions,
     config: OpenAICustomModelConfig
   ): { endpoint: string; body: Record<string, unknown> } {
@@ -192,7 +195,7 @@ export class ChatCompletionsAdapter implements LLMAdapter {
  */
 export class ResponsesAdapter implements LLMAdapter {
   buildRequest(
-    messages: readonly vscode.LanguageModelChatMessage[],
+    messages: readonly vscode.LanguageModelChatRequestMessage[],
     options: vscode.ProvideLanguageModelChatResponseOptions,
     config: OpenAICustomModelConfig
   ): { endpoint: string; body: Record<string, unknown> } {
@@ -267,7 +270,7 @@ export class ResponsesAdapter implements LLMAdapter {
     return { endpoint, body };
   }
 
-  private convertMessagesToItems(messages: readonly vscode.LanguageModelChatMessage[]): ResponsesItem[] {
+  private convertMessagesToItems(messages: readonly vscode.LanguageModelChatRequestMessage[]): ResponsesItem[] {
     const items: ResponsesItem[] = [];
 
     for (const msg of messages) {
@@ -279,7 +282,7 @@ export class ResponsesAdapter implements LLMAdapter {
         if (part instanceof vscode.LanguageModelTextPart) {
           textParts.push(part.value);
         } else if (part instanceof vscode.LanguageModelToolCallPart) {
-          const callId = part.callId || `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          const callId = part.callId || `call_${Date.now()}_${Math.random().toString(36).slice(2, 2 + CALL_ID_SUFFIX_LENGTH)}`;
           let args = "{}";
           try {
             args = JSON.stringify(part.input ?? {});
