@@ -1,11 +1,7 @@
 import * as vscode from "vscode";
 import type {
   OpenAICustomModelConfig,
-  OpenAIChatMessage,
-  OpenAIFunctionToolDef,
   ResponsesItem,
-  ResponsesAPIRequest,
-  ResponsesMessageItem,
   ResponsesContentItem,
   ResponsesFunctionCallItem,
   ResponsesFunctionCallOutputItem,

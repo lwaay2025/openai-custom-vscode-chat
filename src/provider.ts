@@ -204,7 +204,6 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
     this._emittedTextToolCallKeys.clear();
     this._emittedTextToolCallIds.clear();
 
-    let requestBody: Record<string, unknown> | undefined;
     const trackingProgress: Progress<LanguageModelResponsePart> = {
       report: (part) => {
         try {
@@ -244,7 +243,6 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
       // Create adapter and build request
       const adapter = createAdapter(modelConfigInfo);
       const { endpoint, body } = adapter.buildRequest(messages, options, modelConfigInfo);
-      requestBody = body;
 
       console.log("[OpenAI Custom Model Provider] Making request", {
         modelId: model.id,
@@ -283,7 +281,6 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
           const fallbackConfig = { ...modelConfigInfo, apiMode: "chat_completions" as const };
           const fallbackAdapter = createAdapter(fallbackConfig);
           const fallbackRequest = fallbackAdapter.buildRequest(messages, options, fallbackConfig);
-          requestBody = fallbackRequest.body;
 
           const fallbackResponse = await this.makeRequest(
             fallbackRequest.endpoint,
