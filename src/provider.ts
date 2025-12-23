@@ -9,8 +9,9 @@ import {
   Progress,
 } from "vscode";
 import type { OpenAICustomModelConfig, OpenAICustomLanguageModelChatInformation } from "./types";
-import { convertTools, convertMessages, tryParseJSONObject, validateRequest } from "./utils";
+import { convertTools, tryParseJSONObject, validateRequest } from "./utils";
 import type { Storage } from "./storage";
+import { createAdapter, type LLMAdapter } from "./adapters";
 
 /**
  * VS Code Chat provider backed by OpenAI Custom Inference Providers.
@@ -203,7 +204,6 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
     this._emittedTextToolCallKeys.clear();
     this._emittedTextToolCallIds.clear();
 
-    let requestBody: Record<string, unknown> | undefined;
     const trackingProgress: Progress<LanguageModelResponsePart> = {
       report: (part) => {
         try {
@@ -221,21 +221,15 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
       if (!modelConfigInfo) {
         throw new Error("OpenAI Custom model config not found");
       }
-      const baseUrl = modelConfigInfo.baseUrl;
-      const apiKey = modelConfigInfo.apiKey;
-      const modelName = modelConfigInfo.modelName;
-
-      const openaiMessages = convertMessages(messages);
 
       validateRequest(messages);
-
-      const toolConfig = convertTools(options);
 
       if (options.tools && options.tools.length > 128) {
         throw new Error("Cannot have more than 128 tools per request.");
       }
 
       const inputTokenCount = this.estimateMessagesTokens(messages);
+      const toolConfig = convertTools(options);
       const toolTokenCount = this.estimateToolTokens(toolConfig.tools);
       const tokenLimit = Math.max(1, model.maxInputTokens);
       if (inputTokenCount + toolTokenCount > tokenLimit) {
@@ -246,47 +240,69 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
         throw new Error("Message exceeds token limit.");
       }
 
-      requestBody = {
-        model: modelName,
-        messages: openaiMessages,
-        stream: true,
-        max_tokens: Math.min(options.modelOptions?.max_tokens || 4096, model.maxOutputTokens),
-        temperature: options.modelOptions?.temperature ?? 0.7,
-      };
+      // Create adapter and build request
+      const adapter = createAdapter(modelConfigInfo);
+      const { endpoint, body } = adapter.buildRequest(messages, options, modelConfigInfo);
 
-      // Allow-list model options
-      if (options.modelOptions) {
-        const mo = options.modelOptions as Record<string, unknown>;
-        if (typeof mo.stop === "string" || Array.isArray(mo.stop)) {
-          (requestBody as Record<string, unknown>).stop = mo.stop;
-        }
-        if (typeof mo.frequency_penalty === "number") {
-          (requestBody as Record<string, unknown>).frequency_penalty = mo.frequency_penalty;
-        }
-        if (typeof mo.presence_penalty === "number") {
-          (requestBody as Record<string, unknown>).presence_penalty = mo.presence_penalty;
-        }
-      }
-
-      if (toolConfig.tools) {
-        (requestBody as Record<string, unknown>).tools = toolConfig.tools;
-      }
-      if (toolConfig.tool_choice) {
-        (requestBody as Record<string, unknown>).tool_choice = toolConfig.tool_choice;
-      }
-      const response = await fetch(`${baseUrl}`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "User-Agent": this.userAgent,
-        },
-        body: JSON.stringify(requestBody),
+      console.log("[OpenAI Custom Model Provider] Making request", {
+        modelId: model.id,
+        apiMode: modelConfigInfo.apiMode || "chat_completions",
+        endpoint,
+        hasTools: !!toolConfig.tools,
+        toolCount: toolConfig.tools?.length ?? 0,
       });
+
+      const response = await this.makeRequest(endpoint, modelConfigInfo.apiKey, body);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("[OpenAI Custom Model Provider] HF API error response", errorText);
+        console.error("[OpenAI Custom Model Provider] API error response", errorText);
+
+        // Check if we should fallback to chat_completions
+        if (
+          modelConfigInfo.apiMode === "responses" &&
+          modelConfigInfo.fallbackToChatCompletions &&
+          adapter.isUnsupportedError(response.status, errorText)
+        ) {
+          console.log("[OpenAI Custom Model Provider] Responses API not supported, falling back to chat_completions");
+          vscode.window
+            .showWarningMessage(
+              "Responses API not supported by this service. Falling back to chat_completions.",
+              "Don't show again"
+            )
+            .then((selection) => {
+              if (selection === "Don't show again") {
+                // User can update their config to avoid this fallback in the future
+                console.log("[OpenAI Custom Model Provider] User dismissed fallback warning");
+              }
+            });
+
+          // Retry with chat_completions adapter
+          const fallbackConfig = { ...modelConfigInfo, apiMode: "chat_completions" as const };
+          const fallbackAdapter = createAdapter(fallbackConfig);
+          const fallbackRequest = fallbackAdapter.buildRequest(messages, options, fallbackConfig);
+
+          const fallbackResponse = await this.makeRequest(
+            fallbackRequest.endpoint,
+            modelConfigInfo.apiKey,
+            fallbackRequest.body
+          );
+
+          if (!fallbackResponse.ok) {
+            const fallbackErrorText = await fallbackResponse.text();
+            console.error("[OpenAI Custom Model Provider] Fallback API error response", fallbackErrorText);
+            throw new Error(
+              `OpenAI Custom API error: ${fallbackResponse.status} ${fallbackResponse.statusText}${fallbackErrorText ? `\n${fallbackErrorText}` : ""}`
+            );
+          }
+
+          if (!fallbackResponse.body) {
+            throw new Error("No response body from OpenAI Custom API");
+          }
+          await this.processStreamingResponse(fallbackResponse.body, trackingProgress, token, fallbackAdapter);
+          return;
+        }
+
         throw new Error(
           `OpenAI Custom API error: ${response.status} ${response.statusText}${errorText ? `\n${errorText}` : ""}`
         );
@@ -295,7 +311,7 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
       if (!response.body) {
         throw new Error("No response body from OpenAI Custom API");
       }
-      await this.processStreamingResponse(response.body, trackingProgress, token);
+      await this.processStreamingResponse(response.body, trackingProgress, token, adapter);
     } catch (err) {
       console.error("[OpenAI Custom Model Provider] Chat request failed", {
         modelId: model.id,
@@ -304,6 +320,21 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
       });
       throw err;
     }
+  }
+
+  /**
+   * Make an HTTP request to the API
+   */
+  private async makeRequest(endpoint: string, apiKey: string, body: Record<string, unknown>): Promise<Response> {
+    return await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "User-Agent": this.userAgent,
+      },
+      body: JSON.stringify(body),
+    });
   }
 
   /**
@@ -332,15 +363,17 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
   }
 
   /**
-   * Read and parse the HF Router streaming (SSE-like) response and report parts.
+   * Read and parse the streaming (SSE-like) response and report parts.
    * @param responseBody The readable stream body.
    * @param progress Progress reporter for streamed parts.
    * @param token Cancellation token.
+   * @param adapter The adapter to use for parsing events.
    */
   private async processStreamingResponse(
     responseBody: ReadableStream<Uint8Array>,
     progress: vscode.Progress<vscode.LanguageModelResponsePart>,
-    token: vscode.CancellationToken
+    token: vscode.CancellationToken,
+    adapter: LLMAdapter
   ): Promise<void> {
     const reader = responseBody.getReader();
     const decoder = new TextDecoder();
@@ -358,23 +391,73 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (!line.startsWith("data:")) {
+          const event = adapter.parseStreamEvent(line);
+
+          if (event.type === "skip") {
             continue;
           }
-          const data = line.slice(5);
-          if (data === "[DONE]") {
-            // Do not throw on [DONE]; any incomplete/empty buffers are ignored.
+
+          if (event.type === "done") {
+            // Flush any remaining tool call buffers
             await this.flushToolCallBuffers(progress, /*throwOnInvalid*/ false);
-            // Flush any in-progress text-embedded tool call (silent if incomplete)
             await this.flushActiveTextToolCall(progress);
             continue;
           }
 
-          try {
-            const parsed = JSON.parse(data);
-            await this.processDelta(parsed, progress);
-          } catch {
-            // Silently ignore malformed SSE lines temporarily
+          if (event.type === "text") {
+            const res = this.processTextContent(event.content, progress);
+            if (res.emittedText) {
+              this._hasEmittedAssistantText = true;
+            }
+          } else if (event.type === "thinking") {
+            // Report thinking progress if host supports it
+            try {
+              const vsAny = vscode as unknown as Record<string, unknown>;
+              const ThinkingCtor = vsAny["LanguageModelThinkingPart"] as
+                | (new (text: string, id?: string, metadata?: unknown) => unknown)
+                | undefined;
+              if (ThinkingCtor) {
+                progress.report(
+                  new (ThinkingCtor as new (text: string, id?: string, metadata?: unknown) => unknown)(
+                    event.text,
+                    event.id,
+                    event.metadata
+                  ) as unknown as vscode.LanguageModelResponsePart
+                );
+              }
+            } catch {
+              // Ignore errors
+            }
+          } else if (event.type === "tool_call") {
+            // Emit whitespace hint if this is the first tool call after text
+            if (!this._emittedBeginToolCallsHint && this._hasEmittedAssistantText) {
+              progress.report(new vscode.LanguageModelTextPart(" "));
+              this._emittedBeginToolCallsHint = true;
+            }
+
+            // Ignore any further deltas for an index we've already completed
+            if (this._completedToolCallIndices.has(event.index)) {
+              continue;
+            }
+
+            const buf = this._toolCallBuffers.get(event.index) ?? { args: "" };
+            if (event.id) {
+              buf.id = event.id;
+            }
+            if (event.name) {
+              buf.name = event.name;
+            }
+            if (event.args) {
+              buf.args += event.args;
+            }
+            this._toolCallBuffers.set(event.index, buf);
+
+            // Try to emit immediately once arguments become valid JSON
+            await this.tryEmitBufferedToolCall(event.index, progress);
+          } else if (event.type === "finish") {
+            if (event.reason === "tool_calls" || event.reason === "stop") {
+              await this.flushToolCallBuffers(progress, /*throwOnInvalid*/ true);
+            }
           }
         }
       }
@@ -389,113 +472,6 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
       this._textToolActive = undefined;
       this._emittedTextToolCallKeys.clear();
     }
-  }
-
-  /**
-   * Handle a single streamed delta chunk, emitting text and tool call parts.
-   * @param delta Parsed SSE chunk from the Router.
-   * @param progress Progress reporter for parts.
-   */
-  private async processDelta(
-    delta: Record<string, unknown>,
-    progress: vscode.Progress<vscode.LanguageModelResponsePart>
-  ): Promise<boolean> {
-    let emitted = false;
-    const choice = (delta.choices as Record<string, unknown>[] | undefined)?.[0];
-    if (!choice) {
-      return false;
-    }
-
-    const deltaObj = choice.delta as Record<string, unknown> | undefined;
-
-    // report thinking progress if backend provides it and host supports it
-    try {
-      const maybeThinking =
-        (choice as Record<string, unknown> | undefined)?.reasoning_content ??
-        (deltaObj as Record<string, unknown> | undefined)?.reasoning_content;
-      if (maybeThinking !== undefined) {
-        const vsAny = vscode as unknown as Record<string, unknown>;
-        const ThinkingCtor = vsAny["LanguageModelThinkingPart"] as
-          | (new (text: string, id?: string, metadata?: unknown) => unknown)
-          | undefined;
-        if (ThinkingCtor) {
-          let text = "";
-          let id: string | undefined;
-          let metadata: unknown;
-          if (maybeThinking && typeof maybeThinking === "object") {
-            const mt = maybeThinking as Record<string, unknown>;
-            text = typeof mt["text"] === "string" ? (mt["text"] as string) : "";
-            id = typeof mt["id"] === "string" ? (mt["id"] as string) : undefined;
-            metadata = mt["metadata"];
-          } else if (typeof maybeThinking === "string") {
-            text = maybeThinking;
-          }
-          if (text) {
-            progress.report(
-              new (ThinkingCtor as new (text: string, id?: string, metadata?: unknown) => unknown)(
-                text,
-                id,
-                metadata
-              ) as unknown as vscode.LanguageModelResponsePart
-            );
-            emitted = true;
-          }
-        }
-      }
-    } catch {
-      // ignore errors here temporarily
-    }
-    if (deltaObj?.content) {
-      const content = String(deltaObj.content);
-      const res = this.processTextContent(content, progress);
-      if (res.emittedText) {
-        this._hasEmittedAssistantText = true;
-      }
-      if (res.emittedAny) {
-        emitted = true;
-      }
-    }
-
-    if (deltaObj?.tool_calls) {
-      const toolCalls = deltaObj.tool_calls as Array<Record<string, unknown>>;
-
-      // SSEProcessor-like: if first tool call appears after text, emit a whitespace
-      // to ensure any UI buffers/linkifiers are flushed without adding visible noise.
-      if (!this._emittedBeginToolCallsHint && this._hasEmittedAssistantText && toolCalls.length > 0) {
-        progress.report(new vscode.LanguageModelTextPart(" "));
-        this._emittedBeginToolCallsHint = true;
-      }
-
-      for (const tc of toolCalls) {
-        const idx = (tc.index as number) ?? 0;
-        // Ignore any further deltas for an index we've already completed
-        if (this._completedToolCallIndices.has(idx)) {
-          continue;
-        }
-        const buf = this._toolCallBuffers.get(idx) ?? { args: "" };
-        if (tc.id && typeof tc.id === "string") {
-          buf.id = tc.id as string;
-        }
-        const func = tc.function as Record<string, unknown> | undefined;
-        if (func?.name && typeof func.name === "string") {
-          buf.name = func.name as string;
-        }
-        if (typeof func?.arguments === "string") {
-          buf.args += func.arguments as string;
-        }
-        this._toolCallBuffers.set(idx, buf);
-
-        // Emit immediately once arguments become valid JSON to avoid perceived hanging
-        await this.tryEmitBufferedToolCall(idx, progress);
-      }
-    }
-
-    const finish = (choice.finish_reason as string | undefined) ?? undefined;
-    if (finish === "tool_calls" || finish === "stop") {
-      // On both 'tool_calls' and 'stop', emit any buffered calls and throw on invalid JSON
-      await this.flushToolCallBuffers(progress, /*throwOnInvalid*/ true);
-    }
-    return emitted;
   }
 
   /**
