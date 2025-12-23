@@ -62,4 +62,83 @@ export interface OpenAICustomModelConfig {
     supports_tools?: boolean;
     supports_image?: boolean;
   };
+  // New fields for Responses API support
+  apiMode?: "chat_completions" | "responses";
+  instructions?: string;
+  reasoning?: {
+    effort?: "low" | "medium" | "high";
+  };
+  toolChoice?: "auto" | "none" | "required";
+  parallelToolCalls?: boolean;
+  fallbackToChatCompletions?: boolean;
+}
+
+/**
+ * OpenAI Responses API Item types
+ */
+export type ResponsesItem =
+  | ResponsesMessageItem
+  | ResponsesFunctionCallItem
+  | ResponsesFunctionCallOutputItem
+  | ResponsesOutputTextItem;
+
+export interface ResponsesMessageItem {
+  type: "message";
+  role: "user" | "assistant" | "system";
+  content: ResponsesContentItem[];
+}
+
+export interface ResponsesContentItem {
+  type: "input_text" | "output_text";
+  text?: string;
+}
+
+export interface ResponsesFunctionCallItem {
+  type: "function_call";
+  call_id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface ResponsesFunctionCallOutputItem {
+  type: "function_call_output";
+  call_id: string;
+  output: string;
+}
+
+export interface ResponsesOutputTextItem {
+  type: "output_text";
+  text?: string;
+}
+
+/**
+ * OpenAI Responses API request body
+ */
+export interface ResponsesAPIRequest {
+  model: string;
+  input: ResponsesItem[];
+  tools?: OpenAIFunctionToolDef[];
+  tool_choice?: string | { type: "function"; function: { name: string } };
+  instructions?: string;
+  reasoning?: {
+    effort?: "low" | "medium" | "high";
+  };
+  parallel_tool_calls?: boolean;
+  max_output_tokens?: number;
+  temperature?: number;
+  stream?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * OpenAI Responses API response
+ */
+export interface ResponsesAPIResponse {
+  id: string;
+  object: "response";
+  output: ResponsesItem[];
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+  };
 }

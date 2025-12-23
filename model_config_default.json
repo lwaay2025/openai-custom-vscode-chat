@@ -4,7 +4,7 @@
             "id": "qwen3-coder-plus",
             "displayName": "Qwen3-Coder-Plus",
             "modelName": "qwen3-coder-plus",
-            "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+            "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "apiKey": "sk-xxx",
             "tooltip": "阿里巴巴出版的Qwen3 Coder模型",
             "family": "Qwen3",
@@ -14,7 +14,32 @@
                 "supports_tools": true,
                 "supports_image": false
             },
-            "isDefault": false
+            "isDefault": false,
+            "apiMode": "chat_completions"
+        },
+        {
+            "id": "gpt-5-responses",
+            "displayName": "GPT-5 (Responses API)",
+            "modelName": "gpt-5",
+            "baseUrl": "https://api.openai.com/v1",
+            "apiKey": "sk-xxx",
+            "tooltip": "OpenAI GPT-5 using Responses API",
+            "family": "OpenAI",
+            "maxInputTokens": 128000,
+            "maxOutputTokens": 4096,
+            "capabilities": {
+                "supports_tools": true,
+                "supports_image": false
+            },
+            "isDefault": false,
+            "apiMode": "responses",
+            "instructions": "You are a helpful Copilot assistant.",
+            "reasoning": {
+                "effort": "medium"
+            },
+            "toolChoice": "auto",
+            "parallelToolCalls": true,
+            "fallbackToChatCompletions": true
         }
     ]
 }
