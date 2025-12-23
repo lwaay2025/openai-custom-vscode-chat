@@ -8,10 +8,7 @@ import {
   LanguageModelResponsePart,
   Progress,
 } from "vscode";
-import type {
-  OpenAICustomModelConfig,
-  OpenAICustomLanguageModelChatInformation,
-} from "./types";
+import type { OpenAICustomModelConfig, OpenAICustomLanguageModelChatInformation } from "./types";
 import { convertTools, convertMessages, tryParseJSONObject, validateRequest } from "./utils";
 import type { Storage } from "./storage";
 
@@ -93,18 +90,12 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
    * @param token A cancellation token which signals if the user cancelled the request or not
    * @returns A promise that resolves to the list of available language models
    */
-  async prepareLanguageModelChatInformation (
+  async prepareLanguageModelChatInformation(
     options: { silent: boolean },
     _token: CancellationToken
   ): Promise<OpenAICustomLanguageModelChatInformation[]> {
-    const configPath = await this.storage.getConfig() as string | undefined;
-    const ignore = options.silent === true ? true : true;
-    if (!configPath && ignore) {
-      return [];
-    }
-    try {
-      await vscode.workspace.fs.stat(vscode.Uri.file(configPath as string));
-    } catch {
+    const configPath = await this.getConfigPath(options.silent);
+    if (!configPath) {
       return [];
     }
     const configRaw = await vscode.workspace.fs.readFile(vscode.Uri.file(configPath as string));
@@ -138,8 +129,15 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
       modelChatInformationList.push(modelInfo);
       modelConfigTable.set(modelConfig.id, modelConfig);
     }
-    this._modelConfig = modelConfigTable;
-    return modelChatInformationList;
+    if (modelChatInformationList.length === 0) {
+      vscode.window.showWarningMessage(
+        "OpenAI Custom models not found model in the configuration. please check your config file. " + configPath
+      );
+      return [];
+    } else {
+      this._modelConfig = modelConfigTable;
+      return modelChatInformationList;
+    }
   }
 
   async provideLanguageModelChatInformation(
@@ -147,6 +145,36 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
     _token: CancellationToken
   ): Promise<LanguageModelChatInformation[]> {
     return this.prepareLanguageModelChatInformation({ silent: options.silent ?? false }, _token);
+  }
+
+  async getConfigPath(silent: boolean): Promise<string | undefined> {
+    const configPath = (await this.storage.getConfig()) as string | undefined;
+    const ignore = silent === true ? true : true;
+    if (!ignore) {
+      return "";
+    }
+    if (!configPath) {
+      await this.storage.showAndSetConfig();
+    } else {
+      try {
+        await vscode.workspace.fs.stat(vscode.Uri.file(configPath as string));
+      } catch {
+        await this.storage.showAndSetConfig();
+      }
+    }
+    // double check
+    const doubleConfigPath = (await this.storage.getConfig()) as string | undefined;
+    if (!doubleConfigPath) {
+      vscode.window.showWarningMessage("OpenAI Custom config path is not set.");
+      return undefined;
+    }
+    try {
+      await vscode.workspace.fs.stat(vscode.Uri.file(doubleConfigPath as string));
+    } catch {
+      vscode.window.showWarningMessage("OpenAI Custom config file not found at: " + doubleConfigPath);
+      return undefined;
+    }
+    return doubleConfigPath as string;
   }
 
   /**

@@ -18,24 +18,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Management command to configure API key
   context.subscriptions.push(
     vscode.commands.registerCommand("openai.custom.manage", async () => {
-      const modelConfigExisting = await storage.getConfig();
-      const configPath = await vscode.window.showInputBox({
-        title: "OpenAI custom model config",
-        prompt: modelConfigExisting ? "Update your model config file path" : "Enter your model config file path",
-        ignoreFocusOut: true,
-        password: false,
-        value: modelConfigExisting ?? "",
-      });
-      if (configPath === undefined) {
-        return; // user canceled
-      }
-      if (!configPath.trim()) {
-        await storage.clearConfig();
-        vscode.window.showInformationMessage("OpenAI Custom config cleared.");
-        return;
-      }
-      await storage.setConfig(configPath.trim());
-      vscode.window.showInformationMessage("OpenAI Custom config saved.");
+      await storage.showAndSetConfig();
     })
   );
 }

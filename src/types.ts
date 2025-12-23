@@ -1,6 +1,4 @@
-import {
-  LanguageModelChatInformation
-} from "vscode";
+import { LanguageModelChatInformation } from "vscode";
 
 /**
  * OpenAI function-call entry emitted by assistant messages.
@@ -42,9 +40,9 @@ export interface ToolCallBuffer {
 /** OpenAI-style chat roles. */
 export type OpenAIChatRole = "system" | "user" | "assistant" | "tool";
 
-export interface OpenAICustomLanguageModelChatInformation extends LanguageModelChatInformation{
+export interface OpenAICustomLanguageModelChatInformation extends LanguageModelChatInformation {
   isDefault?: boolean;
-  modelCategory?: { label: string; order: number }
+  modelCategory?: { label: string; order: number };
 }
 
 /** OpenAI Custom model config */
