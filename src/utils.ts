@@ -147,6 +147,9 @@ export function convertMessages(messages: readonly vscode.LanguageModelChatReque
   const out: OpenAIChatMessage[] = [];
   for (const m of messages) {
     const role = mapRole(m);
+    const isSystemLike =
+      m.role !== vscode.LanguageModelChatMessageRole.User &&
+      m.role !== vscode.LanguageModelChatMessageRole.Assistant;
     const textParts: string[] = [];
     const toolCalls: OpenAIToolCall[] = [];
     const toolResults: { callId: string; content: string }[] = [];
@@ -181,8 +184,8 @@ export function convertMessages(messages: readonly vscode.LanguageModelChatReque
     }
 
     const text = textParts.join("");
-    // mapRole normalizes any non-user/assistant role to "user" to avoid system rejections
-    const shouldEmitText = role === "user" || role === "system" || (role === "assistant" && !emittedAssistantToolCall);
+    // mapRole normalizes system-like roles to "user" to avoid provider rejections
+    const shouldEmitText = role === "user" || isSystemLike || (role === "assistant" && !emittedAssistantToolCall);
     if (text && shouldEmitText) {
       out.push({ role, content: text });
     }
