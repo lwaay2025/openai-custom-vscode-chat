@@ -153,6 +153,18 @@ suite("OpenAI Custom Chat Provider Extension", () => {
       ]);
     });
 
+    test("maps system text to user when provider disallows system", () => {
+      const messages: vscode.LanguageModelChatMessage[] = [
+        {
+          role: "system" as unknown as vscode.LanguageModelChatMessageRole,
+          content: [new vscode.LanguageModelTextPart("sys prompt")],
+          name: undefined,
+        },
+      ];
+      const out = convertMessages(messages) as ConvertedMessage[];
+      assert.deepEqual(out, [{ role: "user", content: "sys prompt" }]);
+    });
+
     test("maps tool calls and results", () => {
       const toolCall = new vscode.LanguageModelToolCallPart("abc", "toolA", { foo: 1 });
       const toolResult = new vscode.LanguageModelToolResultPart("abc", [new vscode.LanguageModelTextPart("result")]);

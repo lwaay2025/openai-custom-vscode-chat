@@ -326,7 +326,8 @@ function mapRole(message: vscode.LanguageModelChatRequestMessage): Exclude<OpenA
   if (r === ASSISTANT) {
     return "assistant";
   }
-  return "system";
+  // Some custom providers reject system messages entirely; normalize unknown roles to user.
+  return "user";
 }
 
 /**

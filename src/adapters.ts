@@ -198,11 +198,11 @@ export class ResponsesAdapter implements LLMAdapter {
     // Convert messages to Responses API items
     const items = this.convertMessagesToItems(messages);
 
-    // Map instructions to a system message to avoid providers that reject the top-level instructions field
+    // Map instructions to a user message to avoid providers that reject the top-level instructions field or system role
     if (config.instructions?.trim()) {
       items.unshift({
         type: "message",
-        role: "system",
+        role: "user",
         content: [{ type: "input_text", text: config.instructions.trim() }],
       });
     }
@@ -312,8 +312,6 @@ export class ResponsesAdapter implements LLMAdapter {
         role = "assistant";
       } else if (msg.role === vscode.LanguageModelChatMessageRole.User) {
         role = "user";
-      } else {
-        role = "system";
       }
 
       // Add text message if there's text content
