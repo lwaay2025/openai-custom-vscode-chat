@@ -310,8 +310,6 @@ export class ResponsesAdapter implements LLMAdapter {
       let role: "user" | "assistant" = "user";
       if (msg.role === vscode.LanguageModelChatMessageRole.Assistant) {
         role = "assistant";
-      } else if (msg.role === vscode.LanguageModelChatMessageRole.User) {
-        role = "user";
       }
 
       // Add text message if there's text content
