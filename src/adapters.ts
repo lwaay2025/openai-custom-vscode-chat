@@ -197,6 +197,15 @@ export class ResponsesAdapter implements LLMAdapter {
   ): { endpoint: string; body: Record<string, unknown> } {
     // Convert messages to Responses API items
     const items = this.convertMessagesToItems(messages);
+
+    // Map instructions to a system message to avoid providers that reject the top-level instructions field
+    if (config.instructions?.trim()) {
+      items.unshift({
+        type: "message",
+        role: "system",
+        content: [{ type: "input_text", text: config.instructions.trim() }],
+      });
+    }
     const toolConfig = convertTools(options);
 
     // Build endpoint
@@ -219,11 +228,6 @@ export class ResponsesAdapter implements LLMAdapter {
       max_output_tokens: Math.min(options.modelOptions?.max_tokens || 4096, config.maxOutputTokens),
       temperature: options.modelOptions?.temperature ?? 0.7,
     };
-
-    // Add instructions if configured
-    if (config.instructions) {
-      body.instructions = config.instructions;
-    }
 
     // Add reasoning effort if configured
     if (config.reasoning?.effort) {

@@ -176,7 +176,10 @@ suite("Adapters", () => {
       };
       const { body } = adapter.buildRequest(messages, options, config);
 
-      assert.equal(body.instructions, "You are a helpful assistant");
+      const items = body.input as Array<Record<string, unknown>>;
+      assert.equal(items[0].role, "system");
+      const content = items[0].content as Array<Record<string, unknown>>;
+      assert.equal(content[0].text, "You are a helpful assistant");
     });
 
     test("buildRequest includes reasoning effort", () => {
