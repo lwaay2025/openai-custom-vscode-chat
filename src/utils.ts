@@ -181,7 +181,8 @@ export function convertMessages(messages: readonly vscode.LanguageModelChatReque
     }
 
     const text = textParts.join("");
-    if (text && (role === "user" || (role === "assistant" && !emittedAssistantToolCall))) {
+    const shouldEmitText = role === "user" || (role === "assistant" && !emittedAssistantToolCall);
+    if (text && shouldEmitText) {
       out.push({ role, content: text });
     }
   }

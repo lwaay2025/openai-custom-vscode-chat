@@ -306,7 +306,7 @@ export class ResponsesAdapter implements LLMAdapter {
         }
       }
 
-      // Map role
+      // Map role (normalize any non-assistant input to user to avoid providers rejecting system roles)
       let role: "user" | "assistant" = "user";
       if (msg.role === vscode.LanguageModelChatMessageRole.Assistant) {
         role = "assistant";
