@@ -180,6 +180,7 @@ suite("Adapters", () => {
       assert.equal(items[0].role, "system");
       const content = items[0].content as Array<Record<string, unknown>>;
       assert.equal(content[0].text, "You are a helpful assistant");
+      assert.strictEqual((body as Record<string, unknown>).instructions, undefined);
     });
 
     test("buildRequest includes reasoning effort", () => {
