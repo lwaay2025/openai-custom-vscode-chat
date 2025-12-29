@@ -193,7 +193,10 @@ suite("Adapters", () => {
         },
         {
           role: vscode.LanguageModelChatMessageRole.Assistant,
-          content: [vscode.LanguageModelDataPart.text("test-model\\resp_123", "stateful_marker")],
+          // LanguageModelDataPart is not yet included in the
+          // assistant message content union for the current
+          // @types/vscode version, so cast to relax typing.
+          content: [vscode.LanguageModelDataPart.text("test-model\\resp_123", "stateful_marker") as unknown as vscode.LanguageModelTextPart],
           name: undefined,
         },
         {
@@ -277,7 +280,12 @@ suite("Adapters", () => {
 
     test("buildRequest converts image parts to input_image", () => {
       const adapter = new ResponsesAdapter();
-      const img = vscode.LanguageModelDataPart.image(new Uint8Array([1, 2, 3, 4]), "image/png");
+      // LanguageModelDataPart is ahead of the current typings for
+      // chat message content, so cast to keep tests compiling.
+      const img = vscode.LanguageModelDataPart.image(
+        new Uint8Array([1, 2, 3, 4]),
+        "image/png"
+      ) as unknown as vscode.LanguageModelTextPart;
       const messages: vscode.LanguageModelChatMessage[] = [
         {
           role: vscode.LanguageModelChatMessageRole.User,
@@ -307,7 +315,9 @@ suite("Adapters", () => {
       const toolCall = new vscode.LanguageModelToolCallPart("call_img", "toolA", { q: 1 });
       const toolResult = new vscode.LanguageModelToolResultPart("call_img", [
         new vscode.LanguageModelTextPart("result"),
-        vscode.LanguageModelDataPart.image(new Uint8Array([9, 8, 7]), "image/jpeg"),
+        // Relax type here to accommodate LanguageModelDataPart
+        // until the tool result content union is updated upstream.
+        vscode.LanguageModelDataPart.image(new Uint8Array([9, 8, 7]), "image/jpeg") as unknown as vscode.LanguageModelTextPart,
       ]);
       const messages: vscode.LanguageModelChatMessage[] = [
         { role: vscode.LanguageModelChatMessageRole.Assistant, content: [toolCall], name: undefined },

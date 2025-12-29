@@ -8,7 +8,6 @@ import {
   LanguageModelResponsePart,
   Progress,
 } from "vscode";
-import { ProxyAgent } from "undici";
 import type { OpenAICustomModelConfig, OpenAICustomLanguageModelChatInformation } from "./types";
 import { convertTools, tryParseJSONObject, validateRequest } from "./utils";
 import type { Storage } from "./storage";
@@ -404,7 +403,23 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
     };
 
     if (proxy) {
-      fetchOptions.dispatcher = new ProxyAgent(proxy);
+      try {
+        const undici = (await import("undici")) as unknown as {
+          ProxyAgent?: new (proxyUrl: string) => unknown;
+        };
+        if (undici.ProxyAgent) {
+          fetchOptions.dispatcher = new undici.ProxyAgent(proxy);
+        } else {
+          console.warn(
+            "[OpenAI Custom Model Provider] 'undici' ProxyAgent not available; proceeding without proxy support."
+          );
+        }
+      } catch (err) {
+        console.warn(
+          "[OpenAI Custom Model Provider] Failed to load 'undici' for proxy support; proceeding without proxy.",
+          err
+        );
+      }
     }
 
     return (await fetch(endpoint, fetchOptions)) as Response;
