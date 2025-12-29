@@ -18,6 +18,18 @@ export interface OpenAIFunctionToolDef {
 }
 
 /**
+ * OpenAI Responses API 的 function tool 定义（与 chat.completions 的 tools 结构不同）。
+ * 参考：Responses API tools/function 以 name/parameters/strict 为顶层字段。
+ */
+export interface OpenAIResponsesFunctionToolDef {
+  type: "function";
+  name: string;
+  description?: string;
+  parameters?: object;
+  strict?: boolean;
+}
+
+/**
  * OpenAI-style chat message used for router requests.
  */
 export interface OpenAIChatMessage {
@@ -67,10 +79,32 @@ export interface OpenAICustomModelConfig {
   instructions?: string;
   reasoning?: {
     effort?: "low" | "medium" | "high";
+    summary?: "auto" | "none";
   };
   toolChoice?: "auto" | "none" | "required";
   parallelToolCalls?: boolean;
   fallbackToChatCompletions?: boolean;
+  supportsSystemRole?: boolean;
+  /**
+   * Whether the upstream Responses API implementation supports stateful
+   * conversations via `previous_response_id`.
+   * When set to false, stateful markers are ignored and the parameter
+   * is not sent to avoid 400 errors from providers that don't support it.
+   */
+  supportsStatefulResponses?: boolean;
+  proxy?: string;
+  /**
+   * Responses API truncation mode.
+   * When set, forwarded as `truncation` in the request body.
+   */
+  truncation?: "auto" | "disabled";
+  /**
+   * Responses API text configuration.
+   * When set, forwarded as `text` in the request body.
+   */
+  text?: {
+    verbosity?: "low" | "medium" | "high";
+  };
 }
 
 /**
@@ -89,8 +123,9 @@ export interface ResponsesMessageItem {
 }
 
 export interface ResponsesContentItem {
-  type: "input_text" | "output_text";
+  type: "input_text" | "output_text" | "input_image";
   text?: string;
+  image_url?: string;
 }
 
 export interface ResponsesFunctionCallItem {
@@ -117,16 +152,24 @@ export interface ResponsesOutputTextItem {
 export interface ResponsesAPIRequest {
   model: string;
   input: ResponsesItem[];
-  tools?: OpenAIFunctionToolDef[];
-  tool_choice?: string | { type: "function"; function: { name: string } };
-  instructions?: string;
+  tools?: OpenAIResponsesFunctionToolDef[];
+  tool_choice?: "auto" | "none" | "required" | { type: "function"; name: string };
+  previous_response_id?: string;
   reasoning?: {
     effort?: "low" | "medium" | "high";
+    summary?: "auto" | "none";
   };
   parallel_tool_calls?: boolean;
   max_output_tokens?: number;
   temperature?: number;
   stream?: boolean;
+  store?: boolean;
+  include?: string[];
+  truncation?: "auto" | "disabled";
+  text?: {
+    verbosity?: "low" | "medium" | "high";
+  };
+  top_logprobs?: number;
   [key: string]: unknown;
 }
 

@@ -73,7 +73,12 @@ Create a JSON configuration file with your model settings. The extension support
       "apiMode": "responses",
       "instructions": "You are a helpful Copilot assistant specialized in code generation.",
       "reasoning": {
-        "effort": "medium"
+        "effort": "medium",
+        "summary": "auto"
+      },
+      "truncation": "auto",
+      "text": {
+        "verbosity": "medium"
       },
       "toolChoice": "auto",
       "parallelToolCalls": true,
@@ -108,10 +113,14 @@ Create a JSON configuration file with your model settings. The extension support
 When using `apiMode: "responses"`, you can also configure:
 
 - `instructions`: System instructions/prompt for the model
-- `reasoning`: Object with `effort` field (`"low"`, `"medium"`, or `"high"`) to control thinking depth
+- `reasoning`: Object with `effort` (`"low"`, `"medium"`, or `"high"`) and optional `summary` (`"auto"` or `"none"`)
+- `truncation`: Truncation mode (`"auto"` or `"disabled"`)
+- `text`: Text configuration object (supports `verbosity`: `"low"`, `"medium"`, or `"high"`)
 - `toolChoice`: Tool calling mode - `"auto"`, `"none"`, or `"required"`
 - `parallelToolCalls`: Enable parallel tool execution (boolean)
 - `fallbackToChatCompletions`: Auto-fallback if Responses API is unavailable (boolean)
+- `supportsSystemRole`: Whether the model supports the `system` role. If `false`, system messages are converted to user messages with a `[System]: ` prefix. (boolean, default: `true`)
+- `proxy`: Proxy server URL (e.g., `http://127.0.0.1:8888` for Fiddler). (string, default: none)
 
 ## API Mode Comparison
 

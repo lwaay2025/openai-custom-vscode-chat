@@ -18,16 +18,13 @@ interface ConvertedMessage {
 
 suite("OpenAI Custom Chat Provider Extension", () => {
   suite("provider", () => {
+    const mockStorage = {
+      getConfig: async () => undefined,
+      showAndSetConfig: async () => {},
+    } as unknown as Storage;
+
     test("prepareLanguageModelChatInformation returns array (no key -> empty)", async () => {
-      const provider = new OpenAICustomChatModelProvider(
-        {
-          get: async () => undefined,
-          store: async () => {},
-          delete: async () => {},
-          onDidChange: (_listener: unknown) => ({ dispose() {} }),
-        } as unknown as Storage,
-        "GitHubCopilotChat/test VSCode/test"
-      );
+      const provider = new OpenAICustomChatModelProvider(mockStorage, "GitHubCopilotChat/test VSCode/test");
 
       const infos = await provider.prepareLanguageModelChatInformation(
         { silent: true },
@@ -37,15 +34,7 @@ suite("OpenAI Custom Chat Provider Extension", () => {
     });
 
     test("provideTokenCount counts simple string", async () => {
-      const provider = new OpenAICustomChatModelProvider(
-        {
-          get: async () => undefined,
-          store: async () => {},
-          delete: async () => {},
-          onDidChange: (_listener: unknown) => ({ dispose() {} }),
-        } as unknown as Storage,
-        "GitHubCopilotChat/test VSCode/test"
-      );
+      const provider = new OpenAICustomChatModelProvider(mockStorage, "GitHubCopilotChat/test VSCode/test");
 
       const est = await provider.provideTokenCount(
         {
@@ -65,15 +54,7 @@ suite("OpenAI Custom Chat Provider Extension", () => {
     });
 
     test("provideTokenCount counts message parts", async () => {
-      const provider = new OpenAICustomChatModelProvider(
-        {
-          get: async () => undefined,
-          store: async () => {},
-          delete: async () => {},
-          onDidChange: (_listener: unknown) => ({ dispose() {} }),
-        } as unknown as Storage,
-        "GitHubCopilotChat/test VSCode/test"
-      );
+      const provider = new OpenAICustomChatModelProvider(mockStorage, "GitHubCopilotChat/test VSCode/test");
 
       const msg: vscode.LanguageModelChatMessage = {
         role: vscode.LanguageModelChatMessageRole.User,
@@ -98,15 +79,7 @@ suite("OpenAI Custom Chat Provider Extension", () => {
     });
 
     test("provideLanguageModelChatResponse throws without API key", async () => {
-      const provider = new OpenAICustomChatModelProvider(
-        {
-          get: async () => undefined,
-          store: async () => {},
-          delete: async () => {},
-          onDidChange: (_listener: unknown) => ({ dispose() {} }),
-        } as unknown as Storage,
-        "GitHubCopilotChat/test VSCode/test"
-      );
+      const provider = new OpenAICustomChatModelProvider(mockStorage, "GitHubCopilotChat/test VSCode/test");
 
       let threw = false;
       try {

@@ -15,7 +15,9 @@
                 "supports_image": false
             },
             "isDefault": false,
-            "apiMode": "chat_completions"
+            "apiMode": "chat_completions",
+            "supportsSystemRole": true,
+            "proxy": ""
         },
         {
             "id": "gpt-5-responses",
@@ -35,7 +37,12 @@
             "apiMode": "responses",
             "instructions": "You are a helpful Copilot assistant.",
             "reasoning": {
-                "effort": "medium"
+                "effort": "medium",
+                "summary": "auto"
+            },
+            "truncation": "auto",
+            "text": {
+                "verbosity": "medium"
             },
             "toolChoice": "auto",
             "parallelToolCalls": true,

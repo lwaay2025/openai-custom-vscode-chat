@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { OpenAIChatMessage, OpenAIChatRole, OpenAIFunctionToolDef, OpenAIToolCall } from "./types";
+import type { OpenAIChatMessage, OpenAIChatRole, OpenAIFunctionToolDef, OpenAIResponsesFunctionToolDef, OpenAIToolCall } from "./types";
 
 // Constants
 const CALL_ID_SUFFIX_LENGTH = 8;
@@ -141,12 +141,18 @@ function sanitizeSchema(input: unknown, propName?: string): Record<string, unkno
 /**
  * Convert VS Code chat request messages into OpenAI-compatible message objects.
  * @param messages The VS Code chat messages to convert.
+ * @param config Optional model configuration to handle specific model requirements.
  * @returns OpenAI-compatible messages array.
  */
-export function convertMessages(messages: readonly vscode.LanguageModelChatRequestMessage[]): OpenAIChatMessage[] {
+export function convertMessages(
+  messages: readonly vscode.LanguageModelChatRequestMessage[],
+  config?: { supportsSystemRole?: boolean }
+): OpenAIChatMessage[] {
   const out: OpenAIChatMessage[] = [];
+  const supportsSystem = config?.supportsSystemRole !== false;
+
   for (const m of messages) {
-    const role = mapRole(m);
+    let role = mapRole(m);
     const textParts: string[] = [];
     const toolCalls: OpenAIToolCall[] = [];
     const toolResults: { callId: string; content: string }[] = [];
@@ -180,8 +186,12 @@ export function convertMessages(messages: readonly vscode.LanguageModelChatReque
       out.push({ role: "tool", tool_call_id: tr.callId, content: tr.content || "" });
     }
 
-    const text = textParts.join("");
+    let text = textParts.join("");
     if (text && (role === "system" || role === "user" || (role === "assistant" && !emittedAssistantToolCall))) {
+      if (role === "system" && !supportsSystem) {
+        role = "user";
+        text = `[System]: ${text}`;
+      }
       out.push({ role, content: text });
     }
   }
@@ -224,6 +234,49 @@ export function convertTools(options: vscode.ProvideLanguageModelChatResponseOpt
       throw new Error("LanguageModelChatToolMode.Required is not supported with more than one tool");
     }
     tool_choice = { type: "function", function: { name: sanitizeFunctionName(tools[0].name) } };
+  }
+
+  return { tools: toolDefs, tool_choice };
+}
+
+/**
+ * Convert VS Code tool definitions to OpenAI Responses API function tool definitions.
+ *
+ * Responses API 期望 tools 中 function tool 的结构为：
+ * { type: 'function', name, description, parameters, strict }
+ */
+export function convertToolsForResponses(options: vscode.ProvideLanguageModelChatResponseOptions): {
+  tools?: OpenAIResponsesFunctionToolDef[];
+  tool_choice?: "auto" | { type: "function"; name: string };
+} {
+  const tools = options.tools ?? [];
+  if (!tools || tools.length === 0) {
+    return {};
+  }
+
+  const toolDefs: OpenAIResponsesFunctionToolDef[] = tools
+    .filter((t) => t && typeof t === "object")
+    .map((t) => {
+      const name = sanitizeFunctionName(t.name);
+      const description = typeof t.description === "string" ? t.description : "";
+      const params = sanitizeSchema(t.inputSchema ?? { type: "object", properties: {} });
+      return {
+        type: "function" as const,
+        name,
+        description,
+        parameters: params,
+        // 对齐官方：默认 strict:false，且确保 parameters 是对象
+        strict: false,
+      } satisfies OpenAIResponsesFunctionToolDef;
+    });
+
+  let tool_choice: "auto" | { type: "function"; name: string } = "auto";
+  if (options.toolMode === vscode.LanguageModelChatToolMode.Required) {
+    if (tools.length !== 1) {
+      console.error("[OpenAI Custom Model Provider] ToolMode.Required but multiple tools:", tools.length);
+      throw new Error("LanguageModelChatToolMode.Required is not supported with more than one tool");
+    }
+    tool_choice = { type: "function", name: sanitizeFunctionName(tools[0].name) };
   }
 
   return { tools: toolDefs, tool_choice };

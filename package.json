@@ -47,7 +47,9 @@
 			}
 		]
 	},
-	"activationEvents": [],
+	"activationEvents": [
+		"onCommand:openai.custom.manage"
+	],
 	"main": "./out/extension.js",
 	"scripts": {
 		"download-api": "dts dev",
@@ -77,5 +79,11 @@
 		"prettier": "^3.1.0",
 		"typescript": "^5.9.2",
 		"typescript-eslint": "^8.39.0"
+	},
+	"dependencies": {
+		"@types/node-fetch": "^2.6.13",
+		"https-proxy-agent": "^7.0.6",
+		"node-fetch": "^2.7.0",
+		"undici": "^7.16.0"
 	}
 }

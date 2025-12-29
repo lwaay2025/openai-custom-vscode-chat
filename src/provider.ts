@@ -8,6 +8,7 @@ import {
   LanguageModelResponsePart,
   Progress,
 } from "vscode";
+import { ProxyAgent } from "undici";
 import type { OpenAICustomModelConfig, OpenAICustomLanguageModelChatInformation } from "./types";
 import { convertTools, tryParseJSONObject, validateRequest } from "./utils";
 import type { Storage } from "./storage";
@@ -252,11 +253,62 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
         toolCount: toolConfig.tools?.length ?? 0,
       });
 
-      const response = await this.makeRequest(endpoint, modelConfigInfo.apiKey, body);
+      const response = await this.makeRequest(endpoint, modelConfigInfo.apiKey, body, modelConfigInfo.proxy);
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error("[OpenAI Custom Model Provider] API error response", errorText);
+        const lowerErrorText = errorText.toLowerCase();
+
+        // Dynamic detection: some non-official Responses implementations do not support
+        // the `previous_response_id` parameter and return a 400
+        // "Unsupported parameter: previous_response_id". In that case, disable
+        // stateful responses for this model and retry once without previous_response_id.
+        if (
+          modelConfigInfo.apiMode === "responses" &&
+          (modelConfigInfo.supportsStatefulResponses ?? true) &&
+          response.status === 400 &&
+          lowerErrorText.includes("unsupported parameter") &&
+          lowerErrorText.includes("previous_response_id")
+        ) {
+          console.log(
+            "[OpenAI Custom Model Provider] previous_response_id not supported; retrying without stateful responses"
+          );
+          // Disable stateful for this model going forward.
+          modelConfigInfo.supportsStatefulResponses = false;
+
+          const statelessAdapter = createAdapter(modelConfigInfo);
+          const statelessRequest = statelessAdapter.buildRequest(messages, options, modelConfigInfo);
+          const statelessResponse = await this.makeRequest(
+            statelessRequest.endpoint,
+            modelConfigInfo.apiKey,
+            statelessRequest.body,
+            modelConfigInfo.proxy
+          );
+
+          if (!statelessResponse.ok) {
+            const statelessErrorText = await statelessResponse.text();
+            console.error("[OpenAI Custom Model Provider] Stateless retry API error response", statelessErrorText);
+            throw new Error(
+              `OpenAI Custom API error: ${statelessResponse.status} ${statelessResponse.statusText}${
+                statelessErrorText ? `\n${statelessErrorText}` : ""
+              }`
+            );
+          }
+
+          if (!statelessResponse.body) {
+            throw new Error("No response body from OpenAI Custom API (stateless retry)");
+          }
+
+          await this.processStreamingResponse(
+            statelessResponse.body,
+            trackingProgress,
+            token,
+            statelessAdapter,
+            model.id
+          );
+          return;
+        }
 
         // Check if we should fallback to chat_completions
         if (
@@ -285,7 +337,8 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
           const fallbackResponse = await this.makeRequest(
             fallbackRequest.endpoint,
             modelConfigInfo.apiKey,
-            fallbackRequest.body
+            fallbackRequest.body,
+            modelConfigInfo.proxy
           );
 
           if (!fallbackResponse.ok) {
@@ -299,7 +352,7 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
           if (!fallbackResponse.body) {
             throw new Error("No response body from OpenAI Custom API");
           }
-          await this.processStreamingResponse(fallbackResponse.body, trackingProgress, token, fallbackAdapter);
+          await this.processStreamingResponse(fallbackResponse.body, trackingProgress, token, fallbackAdapter, model.id);
           return;
         }
 
@@ -311,7 +364,7 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
       if (!response.body) {
         throw new Error("No response body from OpenAI Custom API");
       }
-      await this.processStreamingResponse(response.body, trackingProgress, token, adapter);
+      await this.processStreamingResponse(response.body, trackingProgress, token, adapter, model.id);
     } catch (err) {
       console.error("[OpenAI Custom Model Provider] Chat request failed", {
         modelId: model.id,
@@ -325,8 +378,13 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
   /**
    * Make an HTTP request to the API
    */
-  private async makeRequest(endpoint: string, apiKey: string, body: Record<string, unknown>): Promise<Response> {
-    return await fetch(endpoint, {
+  private async makeRequest(
+    endpoint: string,
+    apiKey: string,
+    body: Record<string, unknown>,
+    proxy?: string
+  ): Promise<Response> {
+    const fetchOptions: any = {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -334,7 +392,13 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
         "User-Agent": this.userAgent,
       },
       body: JSON.stringify(body),
-    });
+    };
+
+    if (proxy) {
+      fetchOptions.dispatcher = new ProxyAgent(proxy);
+    }
+
+    return (await fetch(endpoint, fetchOptions)) as Response;
   }
 
   /**
@@ -373,7 +437,8 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
     responseBody: ReadableStream<Uint8Array>,
     progress: vscode.Progress<vscode.LanguageModelResponsePart>,
     token: vscode.CancellationToken,
-    adapter: LLMAdapter
+    adapter: LLMAdapter,
+    modelId: string
   ): Promise<void> {
     const reader = responseBody.getReader();
     const decoder = new TextDecoder();
@@ -399,6 +464,15 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
 
           if (event.type === "done") {
             // Flush any remaining tool call buffers
+            await this.flushToolCallBuffers(progress, /*throwOnInvalid*/ false);
+            await this.flushActiveTextToolCall(progress);
+            continue;
+          }
+
+          if (event.type === "stateful_marker") {
+            // 约定：`${modelId}\\${responseId}`（字符串中实际是单个反斜杠）
+            const payload = `${modelId}\\${event.marker}`;
+            progress.report(vscode.LanguageModelDataPart.text(payload, "stateful_marker"));
             await this.flushToolCallBuffers(progress, /*throwOnInvalid*/ false);
             await this.flushActiveTextToolCall(progress);
             continue;
