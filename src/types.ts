@@ -92,6 +92,12 @@ export interface OpenAICustomModelConfig {
    * is not sent to avoid 400 errors from providers that don't support it.
    */
   supportsStatefulResponses?: boolean;
+  /**
+   * Optional per-model User-Agent override. When set, this value will be
+   * used for HTTP requests for this model instead of the extension-wide
+   * default UA string.
+   */
+  ua?: string;
   proxy?: string;
   /**
    * Responses API truncation mode.

@@ -253,7 +253,13 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
         toolCount: toolConfig.tools?.length ?? 0,
       });
 
-      const response = await this.makeRequest(endpoint, modelConfigInfo.apiKey, body, modelConfigInfo.proxy);
+      const response = await this.makeRequest(
+        endpoint,
+        modelConfigInfo.apiKey,
+        body,
+        modelConfigInfo.proxy,
+        modelConfigInfo.ua
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -283,7 +289,8 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
             statelessRequest.endpoint,
             modelConfigInfo.apiKey,
             statelessRequest.body,
-            modelConfigInfo.proxy
+            modelConfigInfo.proxy,
+            modelConfigInfo.ua
           );
 
           if (!statelessResponse.ok) {
@@ -338,7 +345,8 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
             fallbackRequest.endpoint,
             modelConfigInfo.apiKey,
             fallbackRequest.body,
-            modelConfigInfo.proxy
+            modelConfigInfo.proxy,
+            modelConfigInfo.ua
           );
 
           if (!fallbackResponse.ok) {
@@ -382,14 +390,15 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
     endpoint: string,
     apiKey: string,
     body: Record<string, unknown>,
-    proxy?: string
+    proxy?: string,
+    userAgentOverride?: string
   ): Promise<Response> {
     const fetchOptions: any = {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "User-Agent": this.userAgent,
+        "User-Agent": userAgentOverride || this.userAgent,
       },
       body: JSON.stringify(body),
     };

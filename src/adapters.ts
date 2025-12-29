@@ -286,7 +286,10 @@ export class ResponsesAdapter implements LLMAdapter {
     if (config.toolChoice === "none") {
       body.tool_choice = "none";
     } else if (config.toolChoice === "required") {
-      if (toolConfig.tools && toolConfig.tools.length === 1) {
+      const toolCount = toolConfig.tools?.length ?? 0;
+      if (toolCount === 0) {
+        // 没有工具时不要强制要求 tool_choice，避免 API 报错
+      } else if (toolCount === 1 && toolConfig.tools) {
         body.tool_choice = { type: "function", name: toolConfig.tools[0].name };
       } else {
         body.tool_choice = "required";
@@ -390,20 +393,19 @@ export class ResponsesAdapter implements LLMAdapter {
     config: OpenAICustomModelConfig
   ): ResponsesItem[] {
     const items: ResponsesItem[] = [];
+    // 除非显式声明不支持，否则默认支持 system role，以保持和历史行为一致。
     const supportsSystem = config.supportsSystemRole !== false;
+    const instructions = config.instructions?.trim();
+    let injectedInstructions = false;
 
-    // 将 config.instructions 作为首条 message 注入 input：
-    // - 支持 system role 时：role=system
-    // - 不支持时：降级为 user，并在文本前加 "[System]:" 前缀，避免触发后端的 system 限制
-    if (config.instructions?.trim()) {
-      const raw = config.instructions.trim();
-      const role: "system" | "user" = supportsSystem ? "system" : "user";
-      const text = supportsSystem ? raw : `[System]: ${raw}`;
+    // 对支持 system role 的后端，保持官方行为：作为首条 system message 注入。
+    if (supportsSystem && instructions) {
       items.push({
         type: "message",
-        role,
-        content: [{ type: "input_text", text }],
+        role: "system",
+        content: [{ type: "input_text", text: instructions }],
       });
+      injectedInstructions = true;
     }
 
     for (const msg of messages) {
@@ -411,6 +413,7 @@ export class ResponsesAdapter implements LLMAdapter {
       const contentItems: ResponsesContentItem[] = [];
       const toolCalls: ResponsesFunctionCallItem[] = [];
       const toolResults: Array<ResponsesFunctionCallOutputItem | ResponsesMessageItem> = [];
+      let prependInstructions = false;
 
       for (const part of msg.content ?? []) {
         if (part instanceof vscode.LanguageModelTextPart) {
@@ -481,6 +484,14 @@ export class ResponsesAdapter implements LLMAdapter {
       } else {
         role = "system";
       }
+
+      // 对于不支持 system role 的 Responses 后端，将 config.instructions 追加到第一条非 assistant 消息上，
+      // 以符合 Responses 输入格式，又避免发送 role=system。
+      if (!supportsSystem && instructions && !injectedInstructions && msg.role !== vscode.LanguageModelChatMessageRole.Assistant) {
+        prependInstructions = true;
+        injectedInstructions = true;
+      }
+
       // 对不支持 system role 的后端，将 system 消息降级为 user，并加前缀
       let needsSystemPrefix = false;
       if (role === "system" && !supportsSystem) {
@@ -494,6 +505,10 @@ export class ResponsesAdapter implements LLMAdapter {
           text = `[System]: ${text}`;
           needsSystemPrefix = false;
         }
+        if (prependInstructions && text) {
+          text = `[System]: ${instructions}\n\n${text}`;
+          prependInstructions = false;
+        }
         contentItems.push({
           type: role === "assistant" ? "output_text" : "input_text",
           text,
@@ -502,6 +517,13 @@ export class ResponsesAdapter implements LLMAdapter {
       }
 
       if (contentItems.length > 0) {
+        if (prependInstructions) {
+          contentItems.unshift({
+            type: "input_text",
+            text: `[System]: ${instructions}`,
+          });
+          prependInstructions = false;
+        }
         if (needsSystemPrefix) {
           contentItems.unshift({
             type: "input_text",
@@ -529,6 +551,16 @@ export class ResponsesAdapter implements LLMAdapter {
       for (const tr of toolResults) {
         items.push(tr);
       }
+    }
+
+    // 兜底：不支持 system role 且还未注入 instructions（例如极端情况下只有 assistant 消息），
+    // 则单独追加一条 user 消息携带指令，避免提示词丢失。
+    if (!supportsSystem && instructions && !injectedInstructions) {
+      items.unshift({
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: `[System]: ${instructions}` }],
+      });
     }
 
     return items;
