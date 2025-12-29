@@ -1,14 +1,14 @@
 {
 	"name": "openai-custom-vscode-chat",
-	"publisher": "lijcoder",
+	"publisher": "lwaay",
 	"displayName": "OpenAI Custom Provider for GitHub Copilot Chat",
 	"description": "An extension that integrates OpenAI Custom Inference Providers into GitHub Copilot Chat",
 	"icon": "assets/logo.png",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/lijcoder/openai-custom-vscode-chat"
+		"url": "https://github.com/lwaay2025/openai-custom-vscode-chat"
 	},
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"engines": {
 		"vscode": "^1.104.0"
 	},
@@ -22,14 +22,14 @@
 	},
 	"badges": [
 		{
-			"url": "https://img.shields.io/github/stars/lijcoder/openai-custom-vscode-chat?style=social",
+			"url": "https://img.shields.io/github/stars/lwaay2025/openai-custom-vscode-chat?style=social",
 			"description": "Star openai-custom-vscode-chat on Github",
-			"href": "https://github.com/lijcoder/openai-custom-vscode-chat"
+			"href": "https://github.com/lwaay2025/openai-custom-vscode-chat"
 		}
 	],
-	"homepage": "https://github.com/lijcoder/openai-custom-vscode-chat",
+	"homepage": "https://github.com/lwaay2025/openai-custom-vscode-chat",
 	"bugs": {
-		"url": "https://github.com/lijcoder/openai-custom-vscode-chat/issues"
+		"url": "https://github.com/lwaay2025/openai-custom-vscode-chat/issues"
 	},
 	"license": "MIT",
 	"contributes": {

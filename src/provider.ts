@@ -273,7 +273,7 @@ export class OpenAICustomChatModelProvider implements LanguageModelChatProvider 
         if (
           modelConfigInfo.apiMode === "responses" &&
           (modelConfigInfo.supportsStatefulResponses ?? true) &&
-          response.status === 400 &&
+          (response.status === 400 || response.status === 422) &&
           lowerErrorText.includes("unsupported parameter") &&
           lowerErrorText.includes("previous_response_id")
         ) {
